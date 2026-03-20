@@ -34,7 +34,7 @@ from corbell.cli.commands.spec import app as spec_app
 from corbell.cli.commands.export import app as export_app
 from corbell.cli.commands.mcp import app as mcp_app
 from corbell.cli.commands.ui import app as ui_app
-from corbell.cli.commands.init import init_cmd
+
 
 
 # Top-level `corbell init` shortcut
