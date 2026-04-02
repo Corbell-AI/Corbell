@@ -5,6 +5,7 @@
   <p>
     <a href="LICENSE"><img src="https://img.shields.io/badge/License-Apache_2.0-blue.svg" alt="License"/></a>
     <a href="CONTRIBUTING.md"><img src="https://img.shields.io/badge/PRs-welcome-brightgreen.svg" alt="PRs Welcome"/></a>
+    <a href="https://pypi.org/project/corbell/"><img src="https://img.shields.io/pypi/v/corbell" alt="PyPI"/></a>
   </p>
 </div>
 
@@ -68,12 +69,17 @@ pip install corbell
 pip install "corbell[anthropic]"    # Claude (recommended)
 pip install "corbell[openai]"       # GPT-4o
 
+# With local embeddings (adds PyTorch — ~2 GB download):
+pip install "corbell[embeddings]"
+
 # With exports:
 pip install "corbell[notion,linear]"
 
 # Everything:
-pip install "corbell[anthropic,openai,notion,linear]"
+pip install "corbell[anthropic,openai,embeddings,treesitter,notion,linear]"
 ```
+
+> **Note:** The base install is lightweight (~30 MB). Local embeddings (`corbell embeddings build/query`) require the `[embeddings]` extra which pulls PyTorch (~2 GB). If you only want spec generation via an LLM API, the base install is all you need.
 
 **Requirements**: Python ≥ 3.11
 
@@ -82,7 +88,7 @@ pip install "corbell[anthropic,openai,notion,linear]"
 ## 🚀 Quick Setup (2 minutes)
 
 ### Prerequisites
-- Python 3.8+ or Node.js 16+ or Go 1.19+ (based on your project)
+- Python ≥ 3.11
 - Git repository with source code
 
 ### Essential Steps
@@ -345,7 +351,7 @@ corbell spec context "Add exponential backoff retry to payment processing"
 
 | Provider | Models | Key env var |
 |---|---|---|
-| `anthropic` | `claude-sonnet-4-5`, `claude-haiku-4-5` | `ANTHROPIC_API_KEY` |
+| `anthropic` | `claude-sonnet-4-5-20250929`, `claude-haiku-4-5-20251001` | `ANTHROPIC_API_KEY` |
 | `openai` | `gpt-4o`, `gpt-4o-mini`, `gpt-4-turbo` | `OPENAI_API_KEY` |
 | `ollama` | `llama3`, `mistral`, any local model | (none) |
 | `aws` | `us.anthropic.claude-sonnet-4-*` | `BEDROCK_API_KEY` or IAM |
@@ -398,8 +404,8 @@ Corbell runs entirely locally, no cloud required:
 <summary><strong>Development</strong></summary>
 
 ```bash
-git clone https://github.com/your-org/corbell && cd Corbell
-pip install -e ".[dev]"
+git clone https://github.com/Corbell-AI/Corbell && cd Corbell
+pip install -e ".[dev,mcp,embeddings]"
 pytest tests/ -q
 corbell --help
 ```

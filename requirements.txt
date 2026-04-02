@@ -1,3 +1,5 @@
+# CI lockfile — generated on Linux, used by GitHub Actions only.
+# Developers: use  pip install -e ".[dev,mcp,embeddings]"  instead.
 annotated-doc==0.0.4
 annotated-types==0.7.0
 anyio==4.12.1
@@ -18,7 +20,6 @@ idna==3.11
 iniconfig==2.3.0
 Jinja2==3.1.6
 joblib==1.5.3
-librt==0.8.1
 markdown-it-py==4.0.0
 MarkupSafe==3.0.3
 mdurl==0.1.2

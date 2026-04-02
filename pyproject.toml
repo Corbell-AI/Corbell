@@ -26,14 +26,17 @@ dependencies = [
   "pydantic>=2.0",
   "pyyaml>=6.0",
   "gitpython>=3.1",
-  "sentence-transformers>=3.0",
-  "transformers<5.0.0",
-  "numpy>=1.26,<2.0",
   "rich>=13.0",
   "questionary>=2.0",
 ]
 
 [project.optional-dependencies]
+# Local embedding model — pulls PyTorch (~2 GB). Required for `corbell embeddings build/query`.
+embeddings = [
+  "sentence-transformers>=3.0",
+  "transformers<5.0.0",  # TODO: verify sentence-transformers 5.x compat with transformers 5.x and remove cap
+  "numpy>=1.26",
+]
 neo4j    = ["neo4j>=5.0"]
 chroma   = ["chromadb>=0.5"]
 openai   = ["openai>=1.0"]

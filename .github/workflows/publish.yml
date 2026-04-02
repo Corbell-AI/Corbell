@@ -1,0 +1,49 @@
+name: Publish to PyPI
+
+on:
+  release:
+    types: [published]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install build tools
+        run: pip install build
+
+      - name: Build sdist and wheel
+        run: python -m build
+
+      - name: Upload distribution artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist/
+
+  publish:
+    needs: build
+    runs-on: ubuntu-latest
+    # Before this workflow can succeed, configure PyPI Trusted Publishing:
+    # 1. Go to https://pypi.org/manage/project/corbell/settings/publishing/
+    # 2. Add a new "pending publisher": owner=Corbell-AI, repo=Corbell,
+    #    workflow=publish.yml, environment=pypi
+    # No API key or secret is required after that — OIDC handles auth.
+    environment: pypi
+    permissions:
+      id-token: write  # Required for OIDC trusted publishing
+    steps:
+      - name: Download distribution artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist/
+
+      - name: Publish to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
