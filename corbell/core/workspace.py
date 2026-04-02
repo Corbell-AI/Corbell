@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 import os
+from collections import Counter
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, NamedTuple, Optional
 
 import yaml
 from pydantic import BaseModel, Field, field_validator, model_validator
@@ -109,7 +110,7 @@ class LLMConfig(BaseModel):
     """
 
     provider: str = "anthropic"
-    model: str = "claude-sonnet-4-5-20250929"
+    model: str = "claude-sonnet-4-6"
     api_key: Optional[str] = None
 
     # AWS Bedrock
@@ -271,31 +272,267 @@ def find_workspace_root(start: Path | str | None = None) -> Optional[Path]:
     return None
 
 
-def init_workspace_yaml(target_dir: Path) -> Path:
-    """Write a starter workspace.yaml into target_dir/corbell-data/workspace.yaml.
+# ---------------------------------------------------------------------------
+# Auto-detection helpers for `corbell init`
+# ---------------------------------------------------------------------------
+
+_EXT_LANG: Dict[str, str] = {
+    ".py": "python",
+    ".ts": "typescript", ".tsx": "typescript",
+    ".js": "javascript", ".jsx": "javascript",
+    ".go": "go",
+    ".java": "java",
+    ".cs": "csharp",
+    ".rs": "rust",
+    ".rb": "ruby",
+    ".php": "php",
+}
+
+_SKIP_DIRS = {
+    ".git", "node_modules", "__pycache__", "venv", ".venv",
+    "dist", "build", "vendor", "target", ".tox",
+}
+
+_MAX_SIBLING_DETECT = 8   # max sibling repos scanned during init
+_MAX_SIBLING_DISPLAY = 5  # max sibling repos shown / written to workspace.yaml
+
+
+def detect_language(repo_path: Path) -> str:
+    """Return the dominant source language in a repo by counting file extensions.
+
+    Args:
+        repo_path: Root of the repository to scan.
+
+    Returns:
+        Language string (e.g. ``"python"``, ``"typescript"``). Falls back to
+        ``"python"`` if no recognised source files are found.
+    """
+    counts: Counter = Counter()
+    try:
+        for f in repo_path.rglob("*"):
+            if not f.is_file():
+                continue
+            if any(part in _SKIP_DIRS for part in f.parts):
+                continue
+            lang = _EXT_LANG.get(f.suffix.lower())
+            if lang:
+                counts[lang] += 1
+    except OSError:
+        pass
+    return counts.most_common(1)[0][0] if counts else "python"
+
+
+def detect_llm_provider() -> tuple[str, str]:
+    """Return ``(provider, model)`` based on env vars present in the environment.
+
+    Checks common API key env vars in priority order. For cloud providers
+    (AWS/Azure/GCP) the model string is left empty because model IDs are
+    console-specific; the user must fill those in.
+
+    Returns:
+        Tuple of ``(provider_name, model_string)``. ``model_string`` is empty
+        for cloud providers.
+    """
+    checks = [
+        ("ANTHROPIC_API_KEY", "anthropic", "claude-sonnet-4-6"),
+        ("OPENAI_API_KEY", "openai", "gpt-4o"),
+        ("BEDROCK_API_KEY", "aws", ""),
+        ("AWS_ACCESS_KEY_ID", "aws", ""),
+        ("AZURE_OPENAI_API_KEY", "azure", ""),
+        ("GOOGLE_APPLICATION_CREDENTIALS", "gcp", ""),
+    ]
+    for env_var, provider, model in checks:
+        if os.environ.get(env_var):
+            return provider, model
+    return "anthropic", "claude-sonnet-4-6"
+
+
+def find_sibling_git_repos(target: Path, max_repos: int = _MAX_SIBLING_DETECT) -> List[Path]:
+    """Return sibling directories of *target* that contain a ``.git`` folder.
+
+    Args:
+        target: The current workspace root (excluded from results).
+        max_repos: Maximum number of siblings to return.
+
+    Returns:
+        Sorted list of sibling :class:`Path` objects, up to *max_repos*.
+    """
+    repos: List[Path] = []
+    try:
+        for child in sorted(target.parent.iterdir()):
+            if child == target or not child.is_dir():
+                continue
+            if (child / ".git").exists():
+                repos.append(child)
+            if len(repos) >= max_repos:
+                break
+    except OSError:
+        pass
+    return repos
+
+
+class InitDetection(NamedTuple):
+    """Results of auto-detection performed during ``corbell init``."""
+
+    workspace_name: str
+    current_repo_detected: bool
+    current_language: str
+    llm_provider: str
+    llm_model: str
+    llm_env_var_found: bool
+    sibling_repos: List[Path]
+
+
+def detect_init_config(target_dir: Path) -> InitDetection:
+    """Auto-detect workspace configuration from the environment.
+
+    Checks whether *target_dir* is a git repo, detects its dominant language,
+    finds sibling repos, and sniffs available LLM credentials.
+
+    Args:
+        target_dir: Directory where ``corbell init`` is being run.
+
+    Returns:
+        :class:`InitDetection` with everything discovered.
+    """
+    workspace_name = target_dir.name
+    is_git_repo = (target_dir / ".git").exists()
+    language = detect_language(target_dir) if is_git_repo else "python"
+    provider, model = detect_llm_provider()
+    env_var_map = {
+        "anthropic": "ANTHROPIC_API_KEY",
+        "openai": "OPENAI_API_KEY",
+        "aws": "BEDROCK_API_KEY",
+        "azure": "AZURE_OPENAI_API_KEY",
+        "gcp": "GOOGLE_APPLICATION_CREDENTIALS",
+        "ollama": None,
+    }
+    env_var = env_var_map.get(provider)
+    env_found = bool(env_var and os.environ.get(env_var))
+    siblings = find_sibling_git_repos(target_dir)
+    return InitDetection(
+        workspace_name=workspace_name,
+        current_repo_detected=is_git_repo,
+        current_language=language,
+        llm_provider=provider,
+        llm_model=model,
+        llm_env_var_found=env_found,
+        sibling_repos=siblings,
+    )
+
+
+def init_workspace_yaml(target_dir: Path, detection: Optional[InitDetection] = None) -> Path:
+    """Write a workspace.yaml pre-filled with auto-detected configuration.
 
     Args:
         target_dir: Root directory for the new workspace.
+        detection: Pre-computed detection result. If ``None``, detection is
+            run automatically.
 
     Returns:
-        Path to the written file.
+        Path to the written ``workspace.yaml``.
     """
+    if detection is None:
+        detection = detect_init_config(target_dir)
+
     out_dir = target_dir / "corbell-data"
     out_dir.mkdir(parents=True, exist_ok=True)
     out = out_dir / "workspace.yaml"
-    template = """\
-version: "1"
 
-workspace:
-  name: "my-platform"
-  root: ".."
-
+    # ------------------------------------------------------------------ #
+    # Services block                                                       #
+    # ------------------------------------------------------------------ #
+    if detection.current_repo_detected:
+        services_block = f"""\
+services:
+  - id: {detection.workspace_name}
+    repo: .
+    language: {detection.current_language}
+    tags: [core]
+"""
+    else:
+        services_block = """\
 services:
   - id: my-service
     repo: ../my-service
     language: python
     tags: [core]
+"""
 
+    if detection.sibling_repos:
+        services_block += "\n  # Nearby repos detected — uncomment to add:\n"
+        for sibling in detection.sibling_repos[:_MAX_SIBLING_DISPLAY]:
+            lang = detect_language(sibling)
+            services_block += (
+                f"  # - id: {sibling.name}\n"
+                f"  #   repo: ../{sibling.name}\n"
+                f"  #   language: {lang}\n"
+            )
+
+    # ------------------------------------------------------------------ #
+    # LLM block                                                            #
+    # ------------------------------------------------------------------ #
+    p = detection.llm_provider
+    m = detection.llm_model
+
+    if p == "anthropic":
+        llm_block = f"""\
+llm:
+  provider: anthropic
+  model: {m}
+  api_key: ${{ANTHROPIC_API_KEY}}
+"""
+    elif p == "openai":
+        llm_block = f"""\
+llm:
+  provider: openai
+  model: {m}
+  api_key: ${{OPENAI_API_KEY}}
+"""
+    elif p == "aws":
+        llm_block = """\
+llm:
+  provider: aws
+  model: ""  # paste your Bedrock model ID from the AWS console
+  api_key: ${BEDROCK_API_KEY}
+  aws_region: us-east-1
+"""
+    elif p == "azure":
+        llm_block = """\
+llm:
+  provider: azure
+  model: gpt-4o
+  api_key: ${AZURE_OPENAI_API_KEY}
+  azure_endpoint: ${AZURE_OPENAI_ENDPOINT}
+  azure_deployment: ${AZURE_OPENAI_DEPLOYMENT}
+"""
+    elif p == "gcp":
+        llm_block = """\
+llm:
+  provider: gcp
+  model: ""  # paste your Vertex model ID from the GCP console
+  gcp_project: ${GCP_PROJECT}
+  gcp_region: us-central1
+"""
+    else:
+        llm_block = """\
+llm:
+  provider: anthropic
+  model: claude-sonnet-4-6
+  api_key: ${ANTHROPIC_API_KEY}
+"""
+
+    # ------------------------------------------------------------------ #
+    # Full template                                                        #
+    # ------------------------------------------------------------------ #
+    template = f"""\
+version: "1"
+
+workspace:
+  name: "{detection.workspace_name}"
+  root: ".."
+
+{services_block}
 existing_docs:
   auto_scan: true
   paths: []
@@ -321,57 +558,14 @@ spec:
 
 integrations:
   notion:
-    token: ${CORBELL_NOTION_TOKEN}
-    parent_page_id: ${CORBELL_NOTION_PAGE_ID}
+    token: ${{CORBELL_NOTION_TOKEN}}
+    parent_page_id: ${{CORBELL_NOTION_PAGE_ID}}
   linear:
-    api_key: ${CORBELL_LINEAR_API_KEY}
-    team_id: ${CORBELL_LINEAR_TEAM_ID}
-    default_project_id: ${CORBELL_LINEAR_PROJECT_ID}
+    api_key: ${{CORBELL_LINEAR_API_KEY}}
+    team_id: ${{CORBELL_LINEAR_TEAM_ID}}
+    default_project_id: ${{CORBELL_LINEAR_PROJECT_ID}}
 
-llm:
-  # ---- Option 1: Anthropic (recommended) ----
-  provider: anthropic
-  model: claude-sonnet-4-5
-  api_key: ${ANTHROPIC_API_KEY}
+{llm_block}"""
 
-  # ---- Option 2: OpenAI ----
-  # provider: openai
-  # model: gpt-4o
-  # api_key: ${OPENAI_API_KEY}
-
-  # ---- Option 3: AWS Bedrock (Anthropic Claude) ----
-  # Two auth options:
-  #
-  # A) Long-term API key (simplest — paste your Bedrock API key directly):
-  # provider: aws
-  # model: us.anthropic.claude-sonnet-4-20250514-v1:0
-  # api_key: ${BEDROCK_API_KEY}    # get this from AWS Bedrock console
-  # aws_region: us-east-1
-  #
-  # B) IAM credentials (boto3 credential chain):
-  # provider: aws
-  # model: us.anthropic.claude-sonnet-4-20250514-v1:0
-  # aws_region: us-east-1
-  # (set AWS_ACCESS_KEY_ID + AWS_SECRET_ACCESS_KEY or use: aws configure)
-
-  # ---- Option 4: Azure OpenAI ----
-  # provider: azure
-  # model: gpt-4o
-  # api_key: ${AZURE_OPENAI_API_KEY}
-  # azure_endpoint: https://my-resource.openai.azure.com/
-  # azure_deployment: my-gpt4o-deployment
-  # azure_api_version: "2024-02-01"
-
-  # ---- Option 5: GCP Vertex AI (Anthropic Claude) ----
-  # Auth: gcloud auth application-default login
-  # provider: gcp
-  # model: claude-sonnet-4-5@20250514
-  # gcp_project: my-gcp-project
-  # gcp_region: us-central1
-
-  # ---- Option 6: Ollama (local, no API key) ----
-  # provider: ollama
-  # model: llama3
-"""
     out.write_text(template, encoding="utf-8")
     return out
