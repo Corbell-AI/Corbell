@@ -113,16 +113,21 @@ class LLMClient:
         self.gcp_project = gcp_project or os.getenv("GCP_PROJECT", os.getenv("GOOGLE_CLOUD_PROJECT", ""))
         self.gcp_region = gcp_region or os.getenv("GCP_REGION", "us-central1")
 
+        # Stable alias defaults for providers that maintain them.
+        # AWS / Azure / GCP have no safe default — model IDs are console-specific
+        # and region-specific, so we require an explicit value for those.
         _defaults = {
             "anthropic": "claude-sonnet-4-6",
-            "openai": "gpt-4o",
-            "ollama": "llama3",
-            # Cloud defaults — update these to match your cloud console's available model IDs
-            "aws": "us.anthropic.claude-sonnet-4-6-20250514-v1:0",
-            "azure": "gpt-4o",
-            "gcp": "claude-sonnet-4-6@20250514",
+            "openai":    "gpt-4o",
+            "ollama":    "llama3",
         }
-        self.model = model or _defaults.get(self.provider, "claude-sonnet-4-5")
+        self.model = model or _defaults.get(self.provider)
+        if not self.model:
+            raise ValueError(
+                f"No model specified for provider '{self.provider}'.\n"
+                f"Add 'model: <your-model-id>' to workspace.yaml under the llm block.\n"
+                f"Find available model IDs in your cloud console."
+            )
 
     # ------------------------------------------------------------------ #
     # Public API                                                           #
