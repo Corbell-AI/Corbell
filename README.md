@@ -149,7 +149,7 @@ services:
 
 llm:
   provider: anthropic   # or: openai, ollama
-  model: claude-sonnet-4-5-20250929
+  model: claude-sonnet-4-6  # or any supported model: claude-opus-4-6, gpt-4o, llama3, etc.
   api_key: ${ANTHROPIC_API_KEY}
 ```
 
@@ -351,12 +351,12 @@ corbell spec context "Add exponential backoff retry to payment processing"
 
 | Provider | Models | Key env var |
 |---|---|---|
-| `anthropic` | `claude-sonnet-4-5-20250929`, `claude-haiku-4-5-20251001` | `ANTHROPIC_API_KEY` |
+| `anthropic` | `claude-sonnet-4-6`, `claude-opus-4-6`, `claude-haiku-4-5` | `ANTHROPIC_API_KEY` |
 | `openai` | `gpt-4o`, `gpt-4o-mini`, `gpt-4-turbo` | `OPENAI_API_KEY` |
 | `ollama` | `llama3`, `mistral`, any local model | (none) |
-| `aws` | `us.anthropic.claude-sonnet-4-*` | `BEDROCK_API_KEY` or IAM |
-| `azure` | `gpt-4o`, any deployment | `AZURE_OPENAI_API_KEY` + `AZURE_OPENAI_ENDPOINT` |
-| `gcp` | `claude-sonnet-4-5@20250514` | `GOOGLE_APPLICATION_CREDENTIALS` |
+| `aws` | Bedrock model ID from your AWS console (e.g. `us.anthropic.claude-sonnet-4-6-*`) | `BEDROCK_API_KEY` or IAM |
+| `azure` | `gpt-4o`, any deployment name | `AZURE_OPENAI_API_KEY` + `AZURE_OPENAI_ENDPOINT` |
+| `gcp` | Vertex model ID from your GCP console (e.g. `claude-sonnet-4-6@*`) | `GOOGLE_APPLICATION_CREDENTIALS` |
 
 </details>
 

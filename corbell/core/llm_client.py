@@ -32,7 +32,7 @@ class LLMClient:
 
         llm:
           provider: anthropic
-          model: claude-sonnet-4-5-20250929
+          model: claude-sonnet-4-6  # or any supported model: claude-opus-4-6, claude-haiku-4-5, etc.
           api_key: ${ANTHROPIC_API_KEY}
 
     **Cloud providers** (enterprise API keys from your cloud console):
@@ -43,7 +43,7 @@ class LLMClient:
 
         llm:
           provider: aws
-          model: anthropic.claude-sonnet-4-5-20250929-v2:0
+          model: us.anthropic.claude-sonnet-4-6-20250514-v1:0  # check AWS console for available IDs
           aws_region: us-east-1
           # Credentials from env: AWS_ACCESS_KEY_ID + AWS_SECRET_ACCESS_KEY
           # or from ~/.aws/credentials profile
@@ -66,7 +66,7 @@ class LLMClient:
 
         llm:
           provider: gcp
-          model: claude-3-5-sonnet@20241022
+          model: claude-sonnet-4-6@20250514  # check GCP Vertex console for available IDs
           gcp_project: my-gcp-project
           gcp_region: us-central1
           # Auth: GOOGLE_APPLICATION_CREDENTIALS or gcloud auth application-default login
@@ -114,13 +114,13 @@ class LLMClient:
         self.gcp_region = gcp_region or os.getenv("GCP_REGION", "us-central1")
 
         _defaults = {
-            "anthropic": "claude-sonnet-4-5",
+            "anthropic": "claude-sonnet-4-6",
             "openai": "gpt-4o",
             "ollama": "llama3",
-            # Cloud defaults — Claude Sonnet 4.5 on Bedrock / Vertex
-            "aws": "us.anthropic.claude-sonnet-4-20250514-v1:0",
+            # Cloud defaults — update these to match your cloud console's available model IDs
+            "aws": "us.anthropic.claude-sonnet-4-6-20250514-v1:0",
             "azure": "gpt-4o",
-            "gcp": "claude-sonnet-4-5@20250514",
+            "gcp": "claude-sonnet-4-6@20250514",
         }
         self.model = model or _defaults.get(self.provider, "claude-sonnet-4-5")
 
@@ -311,7 +311,7 @@ class LLMClient:
 
             llm:
               provider: aws
-              model: us.anthropic.claude-sonnet-4-20250514-v1:0
+              model: us.anthropic.claude-sonnet-4-6-20250514-v1:0  # check AWS console for available IDs
               api_key: ${BEDROCK_API_KEY}
               aws_region: us-east-1
 
