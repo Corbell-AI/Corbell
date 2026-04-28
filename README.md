@@ -1,3 +1,5 @@
+[![MseeP.ai Security Assessment Badge](https://mseep.net/pr/corbell-ai-corbell-badge.png)](https://mseep.ai/app/corbell-ai-corbell)
+
 <div align="center">
   <img src="assets/logo.png" width="300" alt="Corbell Logo" />
   <h1>Corbell</h1>
