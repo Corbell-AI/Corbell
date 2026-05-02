@@ -436,6 +436,8 @@ We are moving away from hardcoded procedural flows toward a fully **agentic arch
 
 ---
 
+[![MseeP.ai Security Assessment Badge](https://mseep.net/pr/corbell-ai-corbell-badge.png)](https://mseep.ai/app/corbell-ai-corbell)
+
 ## License
 
 Apache 2.0 — see [LICENSE](LICENSE).
