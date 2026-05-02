@@ -1,5 +1,3 @@
-[![MseeP.ai Security Assessment Badge](https://mseep.net/pr/corbell-ai-corbell-badge.png)](https://mseep.ai/app/corbell-ai-corbell)
-
 <div align="center">
   <img src="assets/logo.png" width="300" alt="Corbell Logo" />
   <h1>Corbell</h1>
@@ -437,6 +435,8 @@ We are moving away from hardcoded procedural flows toward a fully **agentic arch
 - **Agentic Review Flow**: Self-correcting design docs where the agent uses the architecture graph as a real-time validator during the generation process.
 
 ---
+
+[![MseeP.ai Security Assessment Badge](https://mseep.net/pr/corbell-ai-corbell-badge.png)](https://mseep.ai/app/corbell-ai-corbell)
 
 ## License
 
