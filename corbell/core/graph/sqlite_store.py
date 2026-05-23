@@ -295,6 +295,160 @@ class SQLiteGraphStore(GraphStore):
             "edges": edge_count,
         }
 
+    def to_mermaid(self) -> str:
+        """Return a single Mermaid file string describing the system boundaries."""
+        with self._conn() as conn:
+            rows = conn.execute("SELECT id, node_type, data FROM graph_nodes").fetchall()
+            services, datastores, queues = [], [], []
+
+            for row in rows:
+                ntype = row["node_type"]
+                data = json.loads(row["data"])
+                nid = row["id"].replace("-", "_").replace(".", "_").replace(":", "_")
+                label = data.get("name", row["id"]).replace('"', "'")
+                if ntype == "service":
+                    services.append({"id": nid, "label": label})
+                elif ntype == "datastore":
+                    datastores.append({"id": nid, "label": label})
+                elif ntype == "queue":
+                    queues.append({"id": nid, "label": label})
+
+            edges = conn.execute("SELECT source_id, target_id, kind FROM graph_edges").fetchall()
+            connections = []
+            seen = set()
+            for e in edges:
+                kind = e["kind"]
+                if kind in ("method_call", "flow_step", "git_coupling", "flow_link"):
+                    continue
+                src = e["source_id"].replace("-", "_").replace(".", "_").replace(":", "_")
+                tgt = e["target_id"].replace("-", "_").replace(".", "_").replace(":", "_")
+                if (src, tgt, kind) in seen:
+                    continue
+                seen.add((src, tgt, kind))
+
+                if kind == "http_call":
+                    connections.append(f"  {src} -- HTTP --> {tgt}")
+                elif kind == "rpc_call":
+                    connections.append(f"  {src} -- RPC/Edge Function --> {tgt}")
+                elif kind == "db_read":
+                    connections.append(f"  {src} -- Reads --> {tgt}")
+                elif kind == "db_write":
+                    connections.append(f"  {src} -- Writes --> {tgt}")
+                elif kind == "queue_publish":
+                    connections.append(f"  {src} -- Publishes --> {tgt}")
+                elif kind == "queue_consume":
+                    connections.append(f"  {src} -- Consumes --> {tgt}")
+                elif kind == "library_dependency":
+                    connections.append(f"  {src} -. Import/Library .-> {tgt}")
+                else:
+                    connections.append(f"  {src} --> {tgt}")
+
+        lines = ["graph LR"]
+        lines.append("  %% Services")
+        for s in services:
+            lines.append(f'  {s["id"]}["{s["label"]}"]')
+
+        if datastores:
+            lines.append("  %% Data Stores")
+            for d in datastores:
+                lines.append(f'  {d["id"]}[("{d["label"]}")]')
+
+        if queues:
+            lines.append("  %% Queues")
+            for q in queues:
+                lines.append(f'  {q["id"]}>"{q["label"]}"]')
+
+        lines.append("  %% Edges")
+        lines.extend(connections)
+
+        lines.append("  %% Styling")
+        lines.append("  classDef service fill:#161b22,stroke:#39d353,stroke-width:2px,color:#c9d1d9;")
+        lines.append("  classDef datastore fill:#161b22,stroke:#ffa657,stroke-width:2px,color:#c9d1d9;")
+        lines.append("  classDef queue fill:#161b22,stroke:#bc8cff,stroke-width:2px,color:#c9d1d9;")
+
+        for s in services:
+            lines.append(f'  class {s["id"]} service')
+        for d in datastores:
+            lines.append(f'  class {d["id"]} datastore')
+        for q in queues:
+            lines.append(f'  class {q["id"]} queue')
+
+        return "\n".join(lines)
+
+    def to_json(self) -> str:
+        """Return the JSON representation of the service graph."""
+        nodes = []
+        edges = []
+        with self._conn() as conn:
+            rows = conn.execute("SELECT id, node_type, data FROM graph_nodes").fetchall()
+            for row in rows:
+                ntype = row["node_type"]
+                data = json.loads(row["data"])
+                node = {"id": row["id"], "type": ntype}
+                if ntype == "service":
+                    node.update({
+                        "label": data.get("name", row["id"]),
+                        "language": data.get("language", ""),
+                        "service_type": data.get("service_type", "api"),
+                        "tags": data.get("tags", []),
+                    })
+                elif ntype == "datastore":
+                    node.update({"label": data.get("name", row["id"]), "kind": data.get("kind", "")})
+                elif ntype == "queue":
+                    node.update({"label": data.get("name", row["id"]), "kind": data.get("kind", "")})
+                elif ntype == "flow":
+                    svc_id = data.get("service_id", "")
+                    node.update({
+                        "label": data.get("name", row["id"]),
+                        "service_id": svc_id,
+                        "step_count": data.get("step_count", 0),
+                    })
+                    edges.append({
+                        "source": svc_id,
+                        "target": row["id"],
+                        "kind": "flow_link",
+                        "meta": {}
+                    })
+                elif ntype == "method":
+                    continue  # don't clutter service-level graph
+                nodes.append(node)
+
+            # Count methods per service for node sizing
+            method_counts: Dict[str, int] = {}
+            mcounts = conn.execute(
+                "SELECT data FROM graph_nodes WHERE node_type='method'"
+            ).fetchall()
+            for row in mcounts:
+                d = json.loads(row["data"])
+                sid = d.get("service_id", "")
+                if sid:
+                    method_counts[sid] = method_counts.get(sid, 0) + 1
+            for n in nodes:
+                if n["type"] == "service":
+                    n["method_count"] = method_counts.get(n["id"], 0)
+
+            # Edges
+            skip_kinds = {"method_call", "flow_step"}
+            erows = conn.execute(
+                "SELECT source_id, target_id, kind, metadata FROM graph_edges"
+            ).fetchall()
+            seen = set()
+            for row in erows:
+                if row["kind"] in skip_kinds:
+                    continue
+                key = (row["source_id"], row["target_id"], row["kind"])
+                if key in seen:
+                    continue
+                seen.add(key)
+                meta = json.loads(row["metadata"] or "{}")
+                edges.append({
+                    "source": row["source_id"],
+                    "target": row["target_id"],
+                    "kind": row["kind"],
+                    "meta": meta,
+                })
+        return json.dumps({"nodes": nodes, "edges": edges}, indent=2)
+
     def clear(self) -> None:
         """Delete all graph data."""
         with self._conn() as conn:

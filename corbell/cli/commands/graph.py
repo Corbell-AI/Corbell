@@ -206,3 +206,29 @@ def graph_callpath(
     console.print(f"[green]Found {len(paths)} path(s):[/green]")
     for i, path in enumerate(paths, 1):
         console.print(f"\n  Path {i}: {' → '.join(path)}")
+
+
+@app.command("export")
+def graph_export(
+    workspace: Optional[Path] = typer.Option(None, "--workspace", "-w", help="Workspace directory."),
+    output: Optional[Path] = typer.Option(None, "--output", "-o", help="Output file path (default: stdout)."),
+    format: str = typer.Option("mermaid", "--format", "-f", help="Output format: mermaid | json"),
+):
+    """Export the service graph to Mermaid or JSON format."""
+    cfg, config_dir = _load(workspace)
+    store = _get_store(cfg, config_dir)
+
+    if format == "mermaid":
+        content = store.to_mermaid()
+    elif format == "json":
+        content = store.to_json()
+    else:
+        console.print(f"[red]Unsupported format: {format}. Must be 'mermaid' or 'json'.[/red]")
+        raise typer.Exit(1)
+
+    if output:
+        output.write_text(content, encoding="utf-8")
+        console.print(f"[green]✓ Exported service graph to {output}[/green]")
+    else:
+        print(content)
+
