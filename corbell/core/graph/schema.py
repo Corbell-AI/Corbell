@@ -160,6 +160,16 @@ class GraphStore(ABC):
         ...
 
     @abstractmethod
+    def to_mermaid(self) -> str:
+        """Return a Mermaid representation of the graph."""
+        ...
+
+    @abstractmethod
+    def to_json(self) -> str:
+        """Return the JSON representation of the service graph."""
+        ...
+
+    @abstractmethod
     def clear(self) -> None:
         """Remove all data from the store."""
         ...
